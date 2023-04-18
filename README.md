@@ -51,3 +51,4 @@ b':r50=2,215,2056,200, 5408,4592,9437,14353,134,4112,0,0,162,30682,\r\n'
 162 means battery life is 162minutes;
 30682 represents the internal resistance of the battery is 306.82mΩ. 
 ```
+Some code structures especially the MQTT formating are inspired by the [mpp-solar project](https://github.com/jblance/mpp-solar)
