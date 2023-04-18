@@ -30,6 +30,7 @@ ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=3)
 ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
+totalAh = 800.00
 mode = "" 
 #mode = "screen"
 
@@ -68,10 +69,51 @@ responseFmt = [
                     b"1": "Charging",
                 },
             ],
+            ["String2Int", 2, "Battery Life", "Minute"],
+            ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
+            ["discard", 1, "CRLF", ""]
+        ]
+# For adding new fields that are derived from reported fields.
+
+# Parameters: New field type, new field name, new field unit,
+#   reported field 1 as variable "a", reported field 2 as variable "b" (None if not needed), formular using a and b.
+additionFmt = [
+            ["", 1, "checksum", ""],
+            ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
+            ["String2Float:r/100", 1, "Current", "A"],
+            ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
+            ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
+            ["String2Float:r/100000", 2, "Watt-Hour", "kw.h"],
+            ["String2Int", 2, "Runtime", "Sec"],
+            ["String2Int:r%100", 2, "Temperature", "°C"],
+            ["String2Float:r/100", 1, "Power", "W"],
+            [
+                #"keyed",  # Actual returned value 99. No definition
+                "discard",
+                "Output Status",
+                {
+                    b"0": "On",
+                    b"1": "Over Voltage Protection",
+                    b"2": "Over Current Protection",
+                    b"3": "Low Voltage Protection",
+                    b"4": "Negative Current Protection",
+                    b"5": "Over Power Protection",
+                    b"6": "Over Temperature Protection",
+                    b"255": "Off",
+                },
+            ],
+            [
+                "keyed",
+                "Current Direction",
+                {
+                    b"0": "Discharging",
+                    b"1": "Charging",
+                },
+            ],
             ["String2Int", 2, "Battery Life", "Min"],
             ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
-            ["discard", 1, "CR", ""]
-        ]
+            ["discard", 1, "CRLF", ""]
+        ]  
 
 def String2Int(raw, adj):
     r = int(raw)
@@ -106,6 +148,12 @@ def parse1Field(field, fmt):
 def parseResponse(rawResp, respFmt) -> dict:
     fields = rawResp.split(b',')
     result = []
+    adjustDep = {
+                    "Current" : [0.0, False],
+                    "Current Direction" : ["", False],
+                    "Remaining Battery Capacity" : [0.0, False],
+                }
+
     if len(fields) != len(respFmt):
         print(f"Response count {len(fields)} != expected format count {len(respFmt)}")
         print(f"Raw Response {rawResp}")
@@ -115,6 +163,17 @@ def parseResponse(rawResp, respFmt) -> dict:
         if name is not None:
             result.append([name, value, unit])
             #print(f"{name}\t\t\t\t{value}{unit}")
+            if name in adjustDep:
+                adjustDep[name] = [value, True]
+    # Adjust Current field
+    if adjustDep["Current"][1] and adjustDep["Current Direction"][1] and adjustDep["Current Direction"][0] == "Discharging":
+        for r in filter(lambda row: row[0] == "Current", result):
+            r[1] = -r[1]
+
+    # Add Capacity %
+    if adjustDep["Remaining Battery Capacity"][1]:
+        result.append(["Battery SOC", round(adjustDep["Remaining Battery Capacity"][0] / totalAh * 100, 2), "%"])
+
     return result
 
 def sendMQTT(data, TestMode=False):
