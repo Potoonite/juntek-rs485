@@ -22,6 +22,10 @@ Edit the following variables in the [python script](juntekrs485.py):
 * tag: Name the Entity prefix you would like the MQTT topic to use.
 * totalAh: Assuming you are using the Coulometer to monitor a battery or battery bank, provide the total Ah capacity of the battery for calculating State of Charge (SoC).
 
+Search for the line `publish.multiple` and customize for your MQTT broker.
+
+For testing purposes, change the `mode` variable to `"screen"` and it'll print the output to stdout instead of MQTT.
+
 ### Juntek Message Format
 Formats are described in the manual. Here is an example:
 ```
