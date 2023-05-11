@@ -13,6 +13,7 @@ According to the Manual:
 
 ## Software requirements
 * Python 3
+* systemd-watchdog (if run using systemd daemon). Install by `pip3 install systemd-watchdog`.
 * MQTT Broker
 * Home Assistant MQTT Integration (Or any other MQTT consumers)
 

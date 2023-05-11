@@ -1,5 +1,6 @@
 import serial
 import paho.mqtt.publish as publish
+import systemd_watchdog
 
 ## Communication Protocol http://68.168.132.244/KG-F_EN_manual.pdf Page 22
 """
@@ -26,7 +27,22 @@ b':r50=2,215,2056,200, 5408,4592,9437,14353,134,4112,0,0,162,30682,\r\n'
 30682 represents the internal resistance of the battery is 306.82mΩ. 
 """
 
-ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=3)
+wd = systemd_watchdog.watchdog()
+if wd.is_enabled:
+    # Report a status message
+    wd.status("Starting serial port ...")
+
+try:
+    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=3)
+except:
+    if wd.is_enabled:
+        wd.status("Serial port failed to open.")
+        wd.notify_error("Serial port failed to open.")
+    else:
+        print("Serial port failed to open.")
+        raise IOError
+    exit()
+
 ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
@@ -157,7 +173,8 @@ def parseResponse(rawResp, respFmt) -> dict:
     if len(fields) != len(respFmt):
         print(f"Response count {len(fields)} != expected format count {len(respFmt)}")
         print(f"Raw Response {rawResp}")
-        return -1
+        raise ValueError("Response count != expected format count")
+
     for (field, fmt) in zip(fields, respFmt):
         (name, value, unit) = parse1Field(field,fmt)
         if name is not None:
@@ -226,15 +243,26 @@ def sendMQTT(data, TestMode=False):
     if len(msgs) > 0:
         publish.multiple(msgs, hostname="localhost") #, port=mqtt_port, auth=auth)
 
-
+if ser.is_open and wd.is_enabled:
+    wd.ready()
 while ser.is_open:
+    if wd.is_enabled:
+        #wd.status("Waiting for serial input...")
+        wd.notify()
     try:
         line = ser.readline()
         if line[:len(ignoreCmd)] == ignoreCmd:
             continue
         if line[:len(responsePrefix)] == responsePrefix:
             # Parse output
-            result = parseResponse(line[len(responsePrefix):], responseFmt)
+            try:
+                result = parseResponse(line[len(responsePrefix):], responseFmt)
+            except Exception as e:
+                if wd.is_enabled:
+                    wd.status(f"Exception {e} parsing response {line[len(responsePrefix):]}")
+                else:
+                    print(f"Exception {e} parsing response {line[len(responsePrefix):]}")
+                continue
             
             if len(result) > 0:
                 if mode == "screen":
@@ -244,6 +272,8 @@ while ser.is_open:
                     sendMQTT(result, TestMode=False)
 
     except KeyboardInterrupt:
+        if wd.is_enabled:
+            wd.status("Keyboard Interrupt")
         break
-
+    
 ser.close()
