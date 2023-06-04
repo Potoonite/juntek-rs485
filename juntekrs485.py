@@ -196,6 +196,8 @@ def parseResponse(rawResp, respFmt) -> dict:
 def sendMQTT(data, TestMode=False):
     msgs = []
     for (_key, value, unit) in data:
+        if _key == "Current Direction":
+            continue
         # remove spaces
         key = _key.replace(" ", "_")
         #if not keep_case:
