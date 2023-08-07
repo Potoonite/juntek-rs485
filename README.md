@@ -1,13 +1,13 @@
 # juntek-rs485
-# Juntek DC KG140F Coulometer RS-485 to Home Assistant MQTT
+# Juntek DC KG140F and KH140F Coulometer RS-485 to Home Assistant MQTT
 
-Juntek DC KG140F is a Coulometer. It uses a shunt to measure DC current. There are several brands on Amazon and Aliexpress.
+Juntek DC KG140F and HK140F are Coulometers. They use a shunt to measure DC current. There are several brands on Amazon and Aliexpress.
 
 According to the Manual:
 >JUNCTEK is a registered trademark of Hangzhou Junce Instruments Co., Ltd.
 
 ## Hardware requirements
-* KG-F Series Coulometer or other hardware that confirms to the same output format as described in the Juntek (or Junctek) [manual](http://68.168.132.244/KG-F_EN_manual.pdf).
+* KG-F KH-F Series Coulometer or other hardware that conforms to the same output format as described in the Juntek (or Junctek) [KG Manual](http://68.168.132.244/KG-F_EN_manual.pdf) [KH Manual](http://68.168.132.244/KH/Manual_en.pdf).
 * RS-485 to USB or Serial Adaptor.
 * An attached screen to KG-F. This is technically optional. The screen automatically sends a command to the Coulometer to trigger a statistics response. The script simply reads the results. The script could also be modified to send the command itself if needed.
 
