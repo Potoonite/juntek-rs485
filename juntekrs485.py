@@ -1,6 +1,7 @@
 import serial
 import paho.mqtt.publish as publish
 import systemd_watchdog
+import datetime
 
 ## Communication Protocol http://68.168.132.244/KG-F_EN_manual.pdf Page 22
 """
@@ -52,17 +53,19 @@ mode = ""
 
 # Attempts to be similar to mpp-solar format in case I could integrate back https://github.com/jblance/mpp-solar 
 # Starts from after responsePrefix
+# fmt[4] is for [min, max] range check.
+# fmt[5] is for max value delta per second check.
 responseFmt = {
     'KG' : [
         ["discard", 1, "checksum", ""],
-        ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
-        ["String2Float:r/100", 1, "Current", "A"],
-        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
+        ["String2Int:r/100", 1, "Battery Bank Voltage", "V", [40, 60], 5],
+        ["String2Float:r/100", 1, "Current", "A", [-400, 400]],
+        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah", [0, totalAh + 50], 50],
         ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
         ["String2Float:r/100000", 2, "Watt-Hour", "kw.h"],
         ["String2Int", 2, "Runtime", "Sec"],
-        ["String2Int:r%100", 2, "Temperature", "°C"],
-        ["String2Float:r/100", 1, "Power", "W"],
+        ["String2Int:r%100", 2, "Temperature", "°C", [-30, 100]],
+        ["String2Float:r/100", 1, "Power", "W", [-30000, 30000]],
         [
             #"keyed",  # Actual returned value 99. No definition
             "discard",
@@ -92,15 +95,15 @@ responseFmt = {
     ],
     'KH' : [
         ["discard", 1, "checksum", ""],
-        ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
-        ["String2Float:r/100", 1, "Current", "A"],
-        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
+        ["String2Int:r/100", 1, "Battery Bank Voltage", "V", [40, 60], 5],
+        ["String2Float:r/100", 1, "Current", "A", [-400, 400]],
+        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah", [0, totalAh + 50], 50],
         ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
         ["String2Float:r/100000", 2, "Watt-Hour (Charging)", "kw.h"],
         ["String2Float:r/100000", 2, "Watt-Hour (DisCharging)", "kw.h"],
         ["String2Int", 2, "OpRecordValue", "Recs"],
-        ["String2Int:r%100", 2, "Temperature", "°C"],
-        ["String2Float:r/100", 1, "Power", "W"],
+        ["String2Int:r%100", 2, "Temperature", "°C", [-30, 100]],
+        ["String2Float:r/100", 1, "Power", "W", [-30000, 30000]],
         [
             "keyed",
             "Current Direction",
@@ -144,6 +147,11 @@ def parse1Field(field, fmt):
     elif dataType == "keyed":
         return (fmt[1], keyed(field, fmt[2]), "")
     else:
+        val = eval(dataType)(field, adj)
+        if len(fmt) >= 5 and len(fmt[4]) == 2:
+            # range check
+            if val < fmt[4][0] or val > fmt[4][1]:
+                raise ValueError("Field value out of range")
         return (fmt[2], eval(dataType)(field, adj), fmt[3])
 
 
@@ -158,10 +166,14 @@ def parseResponse(fields, respFmt) -> dict:
     if len(fields) != len(respFmt):
         print(f"Field count {len(fields)} != expected format count {len(respFmt)}")
         print(f"Fields {fields}")
-        raise ValueError("Response count != expected format count")
+        raise TypeError("Response count != expected format count")
 
     for (field, fmt) in zip(fields, respFmt):
-        (name, value, unit) = parse1Field(field,fmt)
+        try:
+            (name, value, unit) = parse1Field(field,fmt)
+        except ValueError as e:
+            raise e
+
         if name is not None:
             result.append([name, value, unit])
             #print(f"{name}\t\t\t\t{value}{unit}")
@@ -232,6 +244,8 @@ def sendMQTT(data, TestMode=False):
 
 if ser.is_open and wd.is_enabled:
     wd.ready()
+lastResult = []
+lastTimestamp = datetime.datetime.now()
 while ser.is_open:
     if wd.is_enabled:
         #wd.status("Waiting for serial input...")
@@ -244,7 +258,6 @@ while ser.is_open:
             # Identify version by length
             fields = line[len(responsePrefix):].split(b',')
             respFmt = list(filter(lambda a: len(a) == len(fields), responseFmt.values()))[0]
-            print(respFmt)
             if len(respFmt) == 0:
                 if wd.is_enabled:
                     wd.status(f"No matching format parsing response {line[len(responsePrefix):]}")
@@ -255,6 +268,8 @@ while ser.is_open:
             # Parse output
             try:
                 result = parseResponse(fields, respFmt)
+            except ValueError as e:
+                continue
             except Exception as e:
                 if wd.is_enabled:
                     wd.status(f"Exception {e} parsing response {line[len(responsePrefix):]}")
@@ -262,7 +277,20 @@ while ser.is_open:
                     print(f"Exception {e} parsing response {line[len(responsePrefix):]}")
                 continue
             
+            # check with last result to detect abnormal value changes
+            if len(lastResult) == len(result):
+                elapsed = datetime.datetime.now() - lastTimestamp
+                elapsed = max(1.0, elapsed.total_seconds())
+                for (lastRes, res, fmt) in zip(lastResult, result, respFmt):
+                    if len(fmt) < 6 or lastRes[0] != res[0]:
+                        continue
+                    #print(f"Comparing {lastRes[1]} - {res[1]} with {fmt[5]} * {elapsed}")
+                    if abs(lastRes[1] - res[1]) > fmt[5] * elapsed:
+                        raise ValueError("Value change rate out-of-bound")
+
             if len(result) > 0:
+                lastResult = result
+                lastTimestamp = datetime.datetime.now()
                 if mode == "screen":
                     for (name, value, unit) in result:
                         print("{:<30} {}{}".format(name, value, unit))
@@ -273,5 +301,7 @@ while ser.is_open:
         if wd.is_enabled:
             wd.status("Keyboard Interrupt")
         break
+    except ValueError:
+        continue
     
 ser.close()
