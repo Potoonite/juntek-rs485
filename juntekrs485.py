@@ -89,47 +89,6 @@ responseFmt = [
             ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
             ["discard", 1, "CRLF", ""]
         ]
-# For adding new fields that are derived from reported fields.
-
-# Parameters: New field type, new field name, new field unit,
-#   reported field 1 as variable "a", reported field 2 as variable "b" (None if not needed), formular using a and b.
-additionFmt = [
-            ["", 1, "checksum", ""],
-            ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
-            ["String2Float:r/100", 1, "Current", "A"],
-            ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
-            ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
-            ["String2Float:r/100000", 2, "Watt-Hour", "kw.h"],
-            ["String2Int", 2, "Runtime", "Sec"],
-            ["String2Int:r%100", 2, "Temperature", "°C"],
-            ["String2Float:r/100", 1, "Power", "W"],
-            [
-                #"keyed",  # Actual returned value 99. No definition
-                "discard",
-                "Output Status",
-                {
-                    b"0": "On",
-                    b"1": "Over Voltage Protection",
-                    b"2": "Over Current Protection",
-                    b"3": "Low Voltage Protection",
-                    b"4": "Negative Current Protection",
-                    b"5": "Over Power Protection",
-                    b"6": "Over Temperature Protection",
-                    b"255": "Off",
-                },
-            ],
-            [
-                "keyed",
-                "Current Direction",
-                {
-                    b"0": "Discharging",
-                    b"1": "Charging",
-                },
-            ],
-            ["String2Int", 2, "Battery Life", "Min"],
-            ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
-            ["discard", 1, "CRLF", ""]
-        ]  
 
 def String2Int(raw, adj):
     r = int(raw)
