@@ -46,49 +46,76 @@ except:
 ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
-totalAh = 800.00
-mode = "" 
-#mode = "screen"
+totalAh = 820.00
+#mode = "" 
+mode = "screen"
 
 # Attempts to be similar to mpp-solar format in case I could integrate back https://github.com/jblance/mpp-solar 
 # Starts from after responsePrefix
-responseFmt = [
-            ["discard", 1, "checksum", ""],
-            ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
-            ["String2Float:r/100", 1, "Current", "A"],
-            ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
-            ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
-            ["String2Float:r/100000", 2, "Watt-Hour", "kw.h"],
-            ["String2Int", 2, "Runtime", "Sec"],
-            ["String2Int:r%100", 2, "Temperature", "°C"],
-            ["String2Float:r/100", 1, "Power", "W"],
-            [
-                #"keyed",  # Actual returned value 99. No definition
-                "discard",
-                "Output Status",
-                {
-                    b"0": "On",
-                    b"1": "Over Voltage Protection",
-                    b"2": "Over Current Protection",
-                    b"3": "Low Voltage Protection",
-                    b"4": "Negative Current Protection",
-                    b"5": "Over Power Protection",
-                    b"6": "Over Temperature Protection",
-                    b"255": "Off",
-                },
-            ],
-            [
-                "keyed",
-                "Current Direction",
-                {
-                    b"0": "Discharging",
-                    b"1": "Charging",
-                },
-            ],
-            ["String2Int", 2, "Battery Life", "Minute"],
-            ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
-            ["discard", 1, "CRLF", ""]
-        ]
+responseFmt = {
+    'KG' : [
+        ["discard", 1, "checksum", ""],
+        ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
+        ["String2Float:r/100", 1, "Current", "A"],
+        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
+        ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
+        ["String2Float:r/100000", 2, "Watt-Hour", "kw.h"],
+        ["String2Int", 2, "Runtime", "Sec"],
+        ["String2Int:r%100", 2, "Temperature", "°C"],
+        ["String2Float:r/100", 1, "Power", "W"],
+        [
+            #"keyed",  # Actual returned value 99. No definition
+            "discard",
+            "Output Status",
+            {
+                b"0": "On",
+                b"1": "Over Voltage Protection",
+                b"2": "Over Current Protection",
+                b"3": "Low Voltage Protection",
+                b"4": "Negative Current Protection",
+                b"5": "Over Power Protection",
+                b"6": "Over Temperature Protection",
+                b"255": "Off",
+            },
+        ],
+        [
+            "keyed",
+            "Current Direction",
+            {
+                b"0": "Discharging",
+                b"1": "Charging",
+            },
+        ],
+        ["String2Int", 2, "Battery Life", "Minute"],
+        ["String2Float:r/100", 2, "Internal Resistance", "mΩ"],
+        ["discard", 1, "CRLF", ""]
+    ],
+    'KH' : [
+        ["discard", 1, "checksum", ""],
+        ["String2Int:r/100", 1, "Battery Bank Voltage", "V"],
+        ["String2Float:r/100", 1, "Current", "A"],
+        ["String2Float:r/1000", 1, "Remaining Battery Capacity", "Ah"],
+        ["String2Float:r/1000", 2, "Cumulative Capacity", "Ah"],
+        ["String2Float:r/100000", 2, "Watt-Hour (Charging)", "kw.h"],
+        ["String2Float:r/100000", 2, "Watt-Hour (DisCharging)", "kw.h"],
+        ["String2Int", 2, "OpRecordValue", "Recs"],
+        ["String2Int:r%100", 2, "Temperature", "°C"],
+        ["String2Float:r/100", 1, "Power", "W"],
+        [
+            "keyed",
+            "Current Direction",
+            {
+                b"0": "Discharging",
+                b"1": "Charging",
+            },
+        ],
+        ["String2Int", 2, "Battery Life", "Minute"],
+        ["String2Int", 2, "Time Adjustment", "Minute"],
+        ["String2Int", 2, "Date", "Day..."],
+        ["String2Int", 2, "Time", "Sec..."],
+        ["discard", 1, "CRLF", ""]
+    ],
+}
 
 def String2Int(raw, adj):
     r = int(raw)
@@ -120,8 +147,7 @@ def parse1Field(field, fmt):
         return (fmt[2], eval(dataType)(field, adj), fmt[3])
 
 
-def parseResponse(rawResp, respFmt) -> dict:
-    fields = rawResp.split(b',')
+def parseResponse(fields, respFmt) -> dict:
     result = []
     adjustDep = {
                     "Current" : [0.0, False],
@@ -130,8 +156,8 @@ def parseResponse(rawResp, respFmt) -> dict:
                 }
 
     if len(fields) != len(respFmt):
-        print(f"Response count {len(fields)} != expected format count {len(respFmt)}")
-        print(f"Raw Response {rawResp}")
+        print(f"Field count {len(fields)} != expected format count {len(respFmt)}")
+        print(f"Fields {fields}")
         raise ValueError("Response count != expected format count")
 
     for (field, fmt) in zip(fields, respFmt):
@@ -215,9 +241,20 @@ while ser.is_open:
         if line[:len(ignoreCmd)] == ignoreCmd:
             continue
         if line[:len(responsePrefix)] == responsePrefix:
+            # Identify version by length
+            fields = line[len(responsePrefix):].split(b',')
+            respFmt = list(filter(lambda a: len(a) == len(fields), responseFmt.values()))[0]
+            print(respFmt)
+            if len(respFmt) == 0:
+                if wd.is_enabled:
+                    wd.status(f"No matching format parsing response {line[len(responsePrefix):]}")
+                else:
+                    print(f"No matching format parsing response {line[len(responsePrefix):]}")
+                continue
+
             # Parse output
             try:
-                result = parseResponse(line[len(responsePrefix):], responseFmt)
+                result = parseResponse(fields, respFmt)
             except Exception as e:
                 if wd.is_enabled:
                     wd.status(f"Exception {e} parsing response {line[len(responsePrefix):]}")
