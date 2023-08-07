@@ -47,8 +47,8 @@ ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
 totalAh = 820.00
-#mode = "" 
-mode = "screen"
+mode = "" 
+#mode = "screen"
 
 # Attempts to be similar to mpp-solar format in case I could integrate back https://github.com/jblance/mpp-solar 
 # Starts from after responsePrefix
