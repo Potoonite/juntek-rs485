@@ -44,10 +44,11 @@ except:
         raise IOError
     exit()
 
+
 ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
-totalAh = 820.00
+totalAh = 1250.00
 mode = "" 
 #mode = "screen"
 
@@ -243,6 +244,7 @@ def sendMQTT(data, TestMode=False):
         publish.multiple(msgs, hostname="localhost") #, port=mqtt_port, auth=auth)
 
 if ser.is_open and wd.is_enabled:
+    wd.status("Serial port Ready, start polling")
     wd.ready()
 lastResult = []
 lastTimestamp = datetime.datetime.now()
