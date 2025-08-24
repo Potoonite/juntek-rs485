@@ -28,7 +28,7 @@ b':r50=2,215,2056,200, 5408,4592,9437,14353,134,4112,0,0,162,30682,\r\n'
 30682 represents the internal resistance of the battery is 306.82mΩ. 
 """
 
-wd = systemd_watchdog.watchdog()
+wd = systemd_watchdog.WatchDog()
 if wd.is_enabled:
     # Report a status message
     wd.status("Starting serial port ...")
@@ -48,7 +48,7 @@ except:
 ignoreCmd = b':R50=01.\r\n'
 responsePrefix = b':r50=1,' # b':r50=1,34,5166,1030,109337,11738441,62100651,48663,125,0,99,0,644,9117,\r\n'
 tag = "SolarBattery"
-totalAh = 1250.00
+totalAh = 1300.00
 mode = "" 
 #mode = "screen"
 
