@@ -1,5 +1,9 @@
 import serial
-import paho.mqtt.publish as publish
+import paho.mqtt.client as mqtt
+# Create a persistent MQTT client instance
+mqtt_client = mqtt.Client()
+mqtt_client.connect("localhost")  # Change host/port if needed
+mqtt_client.loop_start()
 import systemd_watchdog
 import datetime
 
@@ -34,7 +38,7 @@ if wd.is_enabled:
     wd.status("Starting serial port ...")
 
 try:
-    ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=3)
+    ser = serial.Serial('/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_98e79253100beb11917124e2bfdb7a69-if00-port0', 115200, timeout=3)
 except:
     if wd.is_enabled:
         wd.status("Serial port failed to open.")
@@ -241,7 +245,8 @@ def sendMQTT(data, TestMode=False):
             msg = {"topic": topic, "payload": value}
             msgs.append(msg)
     if len(msgs) > 0:
-        publish.multiple(msgs, hostname="localhost") #, port=mqtt_port, auth=auth)
+        for msg in msgs:
+            mqtt_client.publish(msg["topic"], msg["payload"])
 
 if ser.is_open and wd.is_enabled:
     wd.status("Serial port Ready, start polling")
